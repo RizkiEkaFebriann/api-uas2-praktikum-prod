@@ -4,66 +4,76 @@ const cors = require('cors');
 const db = require('./db');
 
 const app = express();
-console.log("DATABASE_URL:", process.env.DATABASE_URL);
 app.use(cors());
 app.use(express.json());
-app.set("json spaces", 2);
 
-
-// helper parse angka
+// === HELPER ===
 function toInt(v) {
   return parseInt(String(v).replace(/[^\d]/g, ''), 10) || 0;
 }
 
-// --- NORMALISASI ---
-
+// ==========================================================
+// NORMALISASI VENDOR A (WARUNG KLONTONG)
+// ==========================================================
 function normalizeM1(rows) {
-  return rows.map(r => ({
-    vendor: "VendorA",
-    product_code: r.kd_produk,
-    product_name: r.nm_brg,
-    price: Math.round(toInt(r.hrg) * 0.9),
-    stock_status: r.ket_stok === "ada" ? "ada" : "habis"
-  }));
+  return rows.map(r => {
+    const harga_diskon = Math.round(toInt(r.hrg) * 0.9);
+
+    return {
+      vendor: "Vendor A (Warung Klontong)",
+      kd_produk: r.kd_produk,
+      nm_brg: r.nm_brg,
+      hrg: toInt(r.hrg),
+      ket_stok: r.ket_stok,
+      diskon: "10%",
+      harga_diskon: harga_diskon
+    };
+  });
 }
 
+// ==========================================================
+// NORMALISASI VENDOR B
+// ==========================================================
 function normalizeM2(rows) {
   return rows.map(r => ({
-    vendor: "VendorB",
-    product_code: r.sku,
+    vendor: "Vendor B",
+    sku: r.sku,
     product_name: r.product_name,
     price: toInt(r.price),
+    is_available: r.is_available,
     stock_status: r.is_available ? "Tersedia" : "Habis"
   }));
 }
 
+// ==========================================================
+// NORMALISASI VENDOR C
+// ==========================================================
 function normalizeM3(rows) {
   return rows.map(r => {
     const details = typeof r.details === "string" ? JSON.parse(r.details) : r.details;
     const pricing = typeof r.pricing === "string" ? JSON.parse(r.pricing) : r.pricing;
 
-    const base = toInt(pricing.base_price);
-    const tax = toInt(pricing.tax);
-
-    let name = details.name;
-    if ((details.category || "").toLowerCase() === "food") {
-      name += " (Recommended)";
-    }
+    const harga_final = toInt(pricing.base_price) + toInt(pricing.tax);
 
     return {
-      vendor: "VendorC",
-      product_code: String(r.id),
-      product_name: name,
-      price: base + tax,
+      vendor: "Vendor C (Resto)",
+      id: r.id,
+      details: details,
+      pricing: pricing,
+      stock: r.stock,
+      harga_final: harga_final,
+      product_name:
+        (details.category || "").toLowerCase() === "food"
+          ? `${details.name} (Recommended)`
+          : details.name,
       stock_status: r.stock > 0 ? "Tersedia" : "Habis"
     };
   });
 }
 
-// -----------------------------------------------------------------------------
-// ENDPOINT FINAL NORMALISASI
-// -----------------------------------------------------------------------------
-
+// ==========================================================
+// ENDPOINT NORMALISASI (TANPA RAW DATA)
+// ==========================================================
 app.get("/all-products", async (req, res) => {
   try {
     const [m1, m2, m3] = await Promise.all([
@@ -72,15 +82,16 @@ app.get("/all-products", async (req, res) => {
       db.query("SELECT * FROM vendor_c")
     ]);
 
-    const finalData = [
+    // Hanya mengambil hasil normalisasi
+    const normalized = [
       ...normalizeM1(m1.rows),
       ...normalizeM2(m2.rows),
       ...normalizeM3(m3.rows)
     ];
 
     res.json({
-      total: finalData.length,
-      data: finalData
+      total: normalized.length,
+      data: normalized
     });
 
   } catch (err) {
@@ -88,16 +99,8 @@ app.get("/all-products", async (req, res) => {
   }
 });
 
-// -------------------------------
-// CONFIG UNTUK VERCEL ❗ WAJIB ❗
-// -------------------------------
 module.exports = app;
 
-// ---------------------------
-// CONFIG UNTUK LOCAL
-// ---------------------------
 if (require.main === module) {
-  app.listen(3300, () =>
-    console.log("Server berjalan di http://localhost:3300")
-  );
+  app.listen(3300, () => console.log("Server berjalan di http://localhost:3300"));
 }
