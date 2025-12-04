@@ -13,31 +13,29 @@ function toInt(v) {
   return parseInt(String(v).replace(/[^\d]/g, ''), 10) || 0;
 }
 
-// --- NORMALISASI SESUAI PERSYARATAN ---
+// --- NORMALISASI (Tetap disimpan jika butuh nanti, tapi tidak dipakai di endpoint baru) ---
 
-// M1 = Vendor A (Warung)
 function normalizeM1(rows) {
   return rows.map(r => ({
     vendor: "VendorA",
     product_code: r.kd_produk,
     product_name: r.nm_brg,
-    price: Math.round(toInt(r.hrg) * 0.9),    // Diskon 10%
+    price: Math.round(toInt(r.hrg) * 0.9),
     stock_status: r.ket_stok === "ada" ? "ada" : "habis"
   }));
 }
 
-// M2 = Vendor B
 function normalizeM2(rows) {
   return rows.map(r => ({
     vendor: "VendorB",
     product_code: r.sku,
     product_name: r.product_name,
     price: toInt(r.price),
+    // memperbaiki logika
     stock_status: r.is_available ? "Tersedia" : "Habis"
   }));
 }
 
-// M3 = Vendor C (Resto)
 function normalizeM3(rows) {
   return rows.map(r => {
     const details = typeof r.details === "string" ? JSON.parse(r.details) : r.details;
@@ -45,7 +43,6 @@ function normalizeM3(rows) {
 
     const base = toInt(pricing.base_price);
     const tax = toInt(pricing.tax);
-    const finalPrice = base + tax;
 
     let name = details.name;
     if ((details.category || "").toLowerCase() === "food") {
@@ -56,15 +53,17 @@ function normalizeM3(rows) {
       vendor: "VendorC",
       product_code: String(r.id),
       product_name: name,
-      price: finalPrice,
+      price: base + tax,
       stock_status: r.stock > 0 ? "Tersedia" : "Habis"
     };
   });
 }
 
-// --- ENDPOINT GET NORMALIZATION SAJA ---
+// -----------------------------------------------------------------------------
+// OPTIONAL: Jika masih ingin endpoint normalisasi
+// -----------------------------------------------------------------------------
 
-app.get("/products", async (req, res) => {
+app.get("/all-products", async (req, res) => {
   try {
     const [m1, m2, m3] = await Promise.all([
       db.query("SELECT * FROM vendor_a"),
@@ -88,4 +87,6 @@ app.get("/products", async (req, res) => {
   }
 });
 
-app.listen(3300, () => console.log("Server berjalan di http://localhost:3300"));
+app.listen(3300, () =>
+  console.log("Server berjalan di http://localhost:3300")
+);
