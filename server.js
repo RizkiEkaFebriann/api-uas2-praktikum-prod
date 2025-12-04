@@ -1,105 +1,88 @@
+require('dotenv').config();
 const express = require('express');
-const { Pool } = require('pg');
+const cors = require('cors');
+const db = require('./db.js');
+
 const app = express();
+const PORT = process.env.PORT || 3300;
+
+app.use(cors());
 app.use(express.json());
 
-// --- Koneksi Neon.tech ---
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
-
-// --- Helper normalisasi ---
-// Vendor A - Mahasiswa 1
-function normalizeVendorA(item) {
-  const price_final = parseInt(item.price, 10);
-  const status = (item.status === "ada" || item.status === "habis") ? item.status : "habis";
-  return {
-    id: item.id,
-    name: item.nama,
-    price_final,
-    status,
-    vendor: 'A',
-    kategori: item.kategori
-  };
-}
-// Vendor B - Mahasiswa 2
-function normalizeVendorB(item) {
-  const status = item.status ? "Tersedia" : "habis";
-  const price_final = item.base_price + item.tax;
-  return {
-    id: item.id,
-    name: item.name,
-    price_final,
-    status,
-    vendor: 'B',
-    kategori: item.kategori
-  };
-}
-// Vendor C - Mahasiswa 3
-function normalizeVendorC(item) {
-  const price_final = item.harga_base + item.harga_tax;
-  return {
-    id: item.id,
-    name: item.nama,
-    price_final,
-    vendor: 'C',
-    kategori: item.kategori
-  };
+// helper parse int aman
+function toInt(value) {
+  const s = String(value).replace(/[^\d\-]/g, '');
+  if (!s) return 0;
+  return parseInt(s, 10);
 }
 
-// --- Apply persyaratan ---
-function applyFinalRules(items) {
-  return items.map(product => {
-    const p = { ...product };
-    if (p.vendor === 'A') {
-      p.price_final = Math.round(p.price_final * 0.9);
-    }
-    if (p.vendor === 'C' && p.kategori === 'Food') {
-      p.name += ' (Recommended)';
-    }
-    return p;
-  });
-}
-
-function uniformOutput(items) {
-  return items.map(p => ({
-    id: p.id,
-    name: p.name,
-    price_final: p.price_final,
-    status: p.status ?? '-',
-    vendor: p.vendor,
-    kategori: p.kategori
+// Normalisasi Vendor A
+function normalizeVendorA(rows) {
+  return rows.map(r => ({
+    vendor: "VendorA",
+    product_code: r.kd_produk,
+    product_name: r.nm_brg,
+    price: Math.round(toInt(r.hrg) * 0.9), // diskon 10%
+    stock_status: (String(r.ket_stok || "").toLowerCase() === "ada") ? "Tersedia" : "Habis"
   }));
 }
 
-// --- Route GET /products ---
+// Normalisasi Vendor B
+function normalizeVendorB(rows) {
+  return rows.map(r => ({
+    vendor: "VendorB",
+    product_code: r.sku,
+    product_name: r.product_name,
+    price: toInt(r.price),
+    stock_status: r.is_available ? "Tersedia" : "Habis"
+  }));
+}
+
+// Normalisasi Vendor C
+function normalizeVendorC(rows) {
+  return rows.map(r => {
+    const details = typeof r.details === "string" ? JSON.parse(r.details) : r.details || {};
+    const pricing = typeof r.pricing === "string" ? JSON.parse(r.pricing) : r.pricing || {};
+
+    let name = details.name || "";
+    if ((details.category || "").toLowerCase() === "food") name += " (Recommended)";
+
+    return {
+      vendor: "VendorC",
+      product_code: String(r.id),
+      product_name: name,
+      price: toInt(pricing.base_price) + toInt(pricing.tax),
+      stock_status: r.stock > 0 ? "Tersedia" : "Habis"
+    };
+  });
+}
+
+/*
+  GET /products-normalized
+  👉 Mengambil semua tabel vendor (A, B, C)
+  👉 Menormalisasi format data
+  👉 Mengembalikan data final (tanpa insert ke DB)
+*/
 app.get('/products', async (req, res) => {
   try {
-    // Sesuaikan query dengan struktur tabel di Neon kamu!
-    const [vA, vB, vC] = await Promise.all([
-      pool.query('SELECT id, nama, price, status, kategori FROM vendor_a'),
-      pool.query('SELECT id, name, base_price, tax, status, kategori FROM vendor_b'),
-      pool.query('SELECT id, nama, harga_base, harga_tax, kategori FROM vendor_c'),
+    const [ra, rb, rc] = await Promise.all([
+      db.query("SELECT * FROM vendor_a"),
+      db.query("SELECT * FROM vendor_b"),
+      db.query("SELECT * FROM vendor_c")
     ]);
 
-    const productsA = vA.rows.map(normalizeVendorA);
-    const productsB = vB.rows.map(normalizeVendorB);
-    const productsC = vC.rows.map(normalizeVendorC);
+    const final = [
+      ...normalizeVendorA(ra.rows),
+      ...normalizeVendorB(rb.rows),
+      ...normalizeVendorC(rc.rows)
+    ];
 
-    let finalProducts = [...productsA, ...productsB, ...productsC];
-    finalProducts = applyFinalRules(finalProducts);
-    finalProducts = uniformOutput(finalProducts);
+    res.json({ total: final.length, data: final });
 
-    res.json(finalProducts);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Terjadi kesalahan server.' });
+    console.error("ERROR:", err);
+    res.status(500).json({ error: "Terjadi kesalahan", detail: err.message });
   }
 });
 
-// --- Jalankan server ---
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
