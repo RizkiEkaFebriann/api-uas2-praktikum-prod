@@ -7,6 +7,8 @@ const app = express();
 console.log("DATABASE_URL:", process.env.DATABASE_URL);
 app.use(cors());
 app.use(express.json());
+app.set("json spaces", 2);
+
 
 // helper parse angka
 function toInt(v) {
