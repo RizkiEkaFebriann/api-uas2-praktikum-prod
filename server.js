@@ -1,4 +1,3 @@
-// --- SETUP ---
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -13,7 +12,7 @@ function toInt(v) {
   return parseInt(String(v).replace(/[^\d]/g, ''), 10) || 0;
 }
 
-// --- NORMALISASI (Tetap disimpan jika butuh nanti, tapi tidak dipakai di endpoint baru) ---
+// --- NORMALISASI ---
 
 function normalizeM1(rows) {
   return rows.map(r => ({
@@ -31,7 +30,6 @@ function normalizeM2(rows) {
     product_code: r.sku,
     product_name: r.product_name,
     price: toInt(r.price),
-    // memperbaiki logika
     stock_status: r.is_available ? "Tersedia" : "Habis"
   }));
 }
@@ -60,7 +58,7 @@ function normalizeM3(rows) {
 }
 
 // -----------------------------------------------------------------------------
-// OPTIONAL: Jika masih ingin endpoint normalisasi
+// ENDPOINT FINAL NORMALISASI
 // -----------------------------------------------------------------------------
 
 app.get("/all-products", async (req, res) => {
@@ -87,6 +85,16 @@ app.get("/all-products", async (req, res) => {
   }
 });
 
-app.listen(3300, () =>
-  console.log("Server berjalan di http://localhost:3300")
-);
+// -------------------------------
+// CONFIG UNTUK VERCEL ❗ WAJIB ❗
+// -------------------------------
+module.exports = app;
+
+// ---------------------------
+// CONFIG UNTUK LOCAL
+// ---------------------------
+if (require.main === module) {
+  app.listen(3300, () =>
+    console.log("Server berjalan di http://localhost:3300")
+  );
+}
