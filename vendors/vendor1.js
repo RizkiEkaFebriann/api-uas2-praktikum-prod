@@ -67,7 +67,6 @@ router.post('/auth/login', async (req, res, next) => {
     }
 });
 
-// GET ALL Vendor A
 router.get('/', async (req, res, next) => {
     try {
         const result = await db.query("SELECT * FROM vendor_a");
@@ -77,7 +76,6 @@ router.get('/', async (req, res, next) => {
     }
 });
 
-// GET by ID
 router.get('/:id', async (req, res, next) => {
     try {
         const result = await db.query("SELECT * FROM vendor_a WHERE id = $1", [req.params.id]);
@@ -88,7 +86,6 @@ router.get('/:id', async (req, res, next) => {
     }
 });
 
-// CREATE
 router.post('/',authenticateToken, async (req, res, next) => {
     const { kd_produk, nm_brg, hrg, ket_stok } = req.body;
     try {
@@ -103,7 +100,6 @@ router.post('/',authenticateToken, async (req, res, next) => {
     }
 });
 
-// UPDATE
 router.put('/:id',authenticateToken, async (req, res, next) => {
     const { kd_produk, nm_brg, hrg, ket_stok } = req.body;
     try {
@@ -119,7 +115,6 @@ router.put('/:id',authenticateToken, async (req, res, next) => {
     }
 });
 
-// DELETE
 router.delete('/:id', authenticateToken, async (req, res, next) => {
     try {
         const result = await db.query("DELETE FROM vendor_a WHERE id=$1 RETURNING *", [req.params.id]);
